@@ -22,8 +22,18 @@
 
 | 文档 | 用途 |
 |------|------|
-| [架构设计 - architecture/](./docs/architecture) | Java 技术栈、微服务划分、数据库设计、外部对接 |
-| [作战地图 - roadmap/](./docs/roadmap) | 90 天 MVP 项目计划、里程碑、KPI |
+| [架构设计 - architecture/](./docs/architecture/README.md) | Java 技术栈、微服务划分、数据库设计、外部对接 |
+| [作战地图 - roadmap/](./docs/roadmap/README.md) | 90 天 MVP 项目计划、里程碑、KPI |
+
+每个方案目录下的具体文档：
+
+| 方案 | PRD | UI 原型 | 数据模型 | 运营策略 | 其他 |
+|------|-----|--------|---------|---------|------|
+| 1. 信用查询黑名单 | [PRD](./docs/01-credit-blacklist/PRD.md) | [UI](./docs/01-credit-blacklist/UI-prototype.md) | [Data](./docs/01-credit-blacklist/data-model.md) | [Ops](./docs/01-credit-blacklist/operations.md) | —— |
+| 2. 滞销库存共享池 | [PRD](./docs/02-inventory-pool/PRD.md) | [UI](./docs/02-inventory-pool/UI-prototype.md) | [Data](./docs/02-inventory-pool/data-model.md) | [Ops](./docs/02-inventory-pool/operations.md) | —— |
+| 3. 应收账款保理 | [PRD](./docs/03-factoring/PRD.md) | [UI](./docs/03-factoring/UI-prototype.md) | [Data](./docs/03-factoring/data-model.md) | [Ops](./docs/03-factoring/operations.md) | [Bank](./docs/03-factoring/bank-integration.md) |
+| 4. 安全版询价竞价 | [PRD](./docs/04-rfq-bidding/PRD.md) | [UI](./docs/04-rfq-bidding/UI-prototype.md) | [Data](./docs/04-rfq-bidding/data-model.md) | [Ops](./docs/04-rfq-bidding/operations.md) | —— |
+| 5. 商家分层激活 | [PRD](./docs/05-merchant-activation/PRD.md) | [UI](./docs/05-merchant-activation/UI-prototype.md) | [Data](./docs/05-merchant-activation/data-model.md) | [Ops](./docs/05-merchant-activation/operations.md) | —— |
 
 ---
 

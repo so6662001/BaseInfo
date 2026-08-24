@@ -197,13 +197,17 @@ def generate_market(n_days: int = 180, n_merchants: int = 120, seed: int = 20260
         for cat in cats for spec in CATEGORY_SETUP[cat]["specs"]
     }
 
+    # 用商家序号而不是 hash(merchant_id) 派生随机源：Python 的字符串哈希带随机盐，
+    # 用它会让同一个 seed 每次生成不同的市场，合成数据就失去可复现性了。
+    merchant_order = {m: i for i, m in enumerate(merchants["merchant_id"])}
+
     records: List[dict] = []
     for row in merchants.itertuples(index=False):
         mid, mtype = row.merchant_id, row.type
         base_city = row.city
         leader = clone_group.get(mid, mid)
         # 同源小号共用一个随机源，报价才会分毫不差
-        m_rng = np.random.default_rng(abs(hash(leader)) % (2 ** 32))
+        m_rng = np.random.default_rng([seed, merchant_order[leader]])
         zombie_locked: Dict[tuple, float] = {}
 
         for cat, spec, mill in sku_map[mid]:

@@ -204,7 +204,7 @@ def score_merchants(clean: pd.DataFrame, rejected: pd.DataFrame,
         stock_missing = g[COL_STOCK].apply(lambda s: float(s.isna().mean()))
     else:
         n_quotes = n_days = stale = stock_missing = None
-    vol = _volatility_ratio(behavior) if behavior is not None else None
+    vol = _volatility_ratio(behavior, clean) if behavior is not None else None
 
     # 系统性偏离要用全量报价（含被剔除的）来看，否则被剔掉的偏离恰好看不见了。
     z_cols = [COL_MERCHANT, "robust_z", "cell_center_price", COL_PRICE]
@@ -306,7 +306,21 @@ def _behavior_frame(clean: pd.DataFrame, rejected: pd.DataFrame) -> pd.DataFrame
             parts.append(keep)
     if not parts:
         return None
-    return pd.concat(parts, ignore_index=True)
+    merged = pd.concat(parts, ignore_index=True)
+    # 同一 SKU 同一天可能同时出现在存活数据和被剔除数据里（例如重复挂牌、离群报价）。
+    # 不折叠成一条的话，按时间排序后的相邻差分会变成"同一天内两个报价的差"，
+    # 算出来的就不是日间波动了。
+    return (
+        merged.groupby(["sku_id", COL_DATE], observed=True)
+        .agg(
+            **{
+                COL_MERCHANT: (COL_MERCHANT, "first"),
+                COL_CELL: (COL_CELL, "first"),
+                COL_PRICE: (COL_PRICE, "median"),
+            }
+        )
+        .reset_index()
+    )
 
 
 def _penalty(x: pd.Series, free: float, limit: float, floor: float) -> pd.Series:
@@ -318,25 +332,40 @@ def _penalty(x: pd.Series, free: float, limit: float, floor: float) -> pd.Series
     return 1.0 - ratio * (1.0 - floor)
 
 
-def _volatility_ratio(behavior: pd.DataFrame) -> pd.Series:
-    """商家自身报价波动 / 所在单元市场波动。远大于 1 说明在乱跳价。"""
-    if behavior is None or behavior.empty:
-        return pd.Series(dtype="float64")
-    df = behavior[[COL_MERCHANT, COL_CELL, COL_DATE, COL_PRICE, "sku_id"]].sort_values(
+def _abs_returns(df: pd.DataFrame) -> pd.DataFrame:
+    """按 SKU 计算相邻报价之间的绝对变动幅度。"""
+    out = df[[COL_MERCHANT, COL_CELL, COL_DATE, COL_PRICE, "sku_id"]].sort_values(
         ["sku_id", COL_DATE]
-    )
-    g = df.groupby("sku_id", observed=True)[COL_PRICE]
+    ).copy()
+    g = out.groupby("sku_id", observed=True)[COL_PRICE]
     with np.errstate(divide="ignore", invalid="ignore"):
-        df["_ret"] = (g.shift(0) / g.shift(1) - 1.0).abs()
+        out["_ret"] = (out[COL_PRICE] / g.shift(1) - 1.0).abs()
+    return out
 
+
+def _volatility_ratio(behavior: pd.DataFrame, clean: pd.DataFrame) -> pd.Series:
+    """商家自身报价波动 / 所在单元的市场波动。远大于 1 说明在乱跳价。
+
+    分子用全量行为数据（含被剔除的离群报价），否则乱跳价商家的极端报价恰好都被
+    清洗掉了，它反而显得很稳。
+
+    分母必须用**清洗后**的数据衡量市场波动：如果分母也用全量数据，
+    那些离群报价会把"市场波动"一起撑大，比值又被拉回 1 附近，指标就失灵了。
+    """
+    if behavior is None or behavior.empty or clean is None or clean.empty:
+        return pd.Series(dtype="float64")
+
+    own_df = _abs_returns(behavior)
     market = (
-        df.groupby([COL_CELL, COL_DATE], observed=True)["_ret"].median().rename("_mkt")
+        _abs_returns(clean)
+        .groupby([COL_CELL, COL_DATE], observed=True)["_ret"].median().rename("_mkt")
     )
-    df = df.join(market, on=[COL_CELL, COL_DATE])
-    own = df.groupby(COL_MERCHANT, observed=True)["_ret"].median()
-    mkt = df.groupby(COL_MERCHANT, observed=True)["_mkt"].median()
+    own_df = own_df.join(market, on=[COL_CELL, COL_DATE])
+
+    own = own_df.groupby(COL_MERCHANT, observed=True)["_ret"].median()
+    mkt = own_df.groupby(COL_MERCHANT, observed=True)["_mkt"].median()
     floor = 0.002  # 市场几乎不动时，避免比值爆炸
-    return (own / mkt.clip(lower=floor)).replace([np.inf, -np.inf], np.nan)
+    return (own / mkt.fillna(floor).clip(lower=floor)).replace([np.inf, -np.inf], np.nan)
 
 
 # --------------------------------------------------------------------------------------

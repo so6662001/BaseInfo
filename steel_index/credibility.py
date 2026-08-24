@@ -22,8 +22,15 @@ from .schema import COL_CELL, COL_DATE, COL_MERCHANT, COL_PRICE, COL_STOCK
 NEUTRAL_SCORE = 0.70
 """新商家或样本不足时的中性分：不奖励也不拉黑。"""
 
-SHRINK_STRENGTH = 20.0
-"""贝叶斯收缩强度（等效样本天数），避免小样本商家分数剧烈摆动。"""
+SHRINK_STRENGTH = 8.0
+"""贝叶斯收缩强度（等效样本天数），避免小样本商家分数剧烈摆动。
+取两周左右的量级：够长以压住偶发噪声，又不至于让证据充分的捣乱商家靠"样本少"蒙混过关。"""
+
+_BEHAVIOR_RULES = ("R020", "R021", "R022", "R030", "R031", "R040", "R041")
+"""价格本身合法、但被行为类规则剔除的记录。
+
+衡量商家行为（偏离度、波动率）必须把这些记录算进来：乱跳价的商家，
+极端报价恰恰都被清洗剔掉了，只看存活数据的话它反而显得规规矩矩。"""
 
 
 @dataclass
@@ -188,15 +195,16 @@ def score_merchants(clean: pd.DataFrame, rejected: pd.DataFrame,
     all_days = universe.groupby(COL_MERCHANT, observed=True)[COL_DATE].nunique()
     index = all_days.index
 
+    behavior = _behavior_frame(clean, rejected)
     if not clean.empty:
         g = clean.groupby(COL_MERCHANT, observed=True)
         n_quotes = g[COL_PRICE].size()
         n_days = g[COL_DATE].nunique()
         stale = g["is_stale"].mean() if "is_stale" in clean else None
         stock_missing = g[COL_STOCK].apply(lambda s: float(s.isna().mean()))
-        vol = _volatility_ratio(clean)
     else:
-        n_quotes = n_days = stale = stock_missing = vol = None
+        n_quotes = n_days = stale = stock_missing = None
+    vol = _volatility_ratio(behavior) if behavior is not None else None
 
     # 系统性偏离要用全量报价（含被剔除的）来看，否则被剔掉的偏离恰好看不见了。
     z_cols = [COL_MERCHANT, "robust_z", "cell_center_price", COL_PRICE]
@@ -285,6 +293,22 @@ def score_merchants(clean: pd.DataFrame, rejected: pd.DataFrame,
     return stat
 
 
+def _behavior_frame(clean: pd.DataFrame, rejected: pd.DataFrame) -> pd.DataFrame | None:
+    """合并存活数据与"价格合法但行为异常"的被剔除数据，用于衡量商家行为。"""
+    need = [COL_MERCHANT, COL_CELL, COL_DATE, COL_PRICE, "sku_id"]
+    parts = []
+    if clean is not None and not clean.empty and set(need) <= set(clean.columns):
+        parts.append(clean[need])
+    if (rejected is not None and not rejected.empty
+            and set(need) <= set(rejected.columns) and "reject_rule" in rejected):
+        keep = rejected.loc[rejected["reject_rule"].isin(_BEHAVIOR_RULES), need]
+        if not keep.empty:
+            parts.append(keep)
+    if not parts:
+        return None
+    return pd.concat(parts, ignore_index=True)
+
+
 def _penalty(x: pd.Series, free: float, limit: float, floor: float) -> pd.Series:
     """线性惩罚：<= free 不罚，>= limit 罚到 floor，中间线性过渡。"""
     x = pd.Series(x).astype("float64").fillna(0.0)
@@ -294,11 +318,11 @@ def _penalty(x: pd.Series, free: float, limit: float, floor: float) -> pd.Series
     return 1.0 - ratio * (1.0 - floor)
 
 
-def _volatility_ratio(clean: pd.DataFrame) -> pd.Series:
+def _volatility_ratio(behavior: pd.DataFrame) -> pd.Series:
     """商家自身报价波动 / 所在单元市场波动。远大于 1 说明在乱跳价。"""
-    if clean.empty:
+    if behavior is None or behavior.empty:
         return pd.Series(dtype="float64")
-    df = clean[[COL_MERCHANT, COL_CELL, COL_DATE, COL_PRICE, "sku_id"]].sort_values(
+    df = behavior[[COL_MERCHANT, COL_CELL, COL_DATE, COL_PRICE, "sku_id"]].sort_values(
         ["sku_id", COL_DATE]
     )
     g = df.groupby("sku_id", observed=True)[COL_PRICE]

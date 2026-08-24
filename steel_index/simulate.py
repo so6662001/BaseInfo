@@ -85,6 +85,17 @@ class SimulatedMarket:
             self.merchants["type"] == "clone", "merchant_id"
         ].tolist()
 
+    @property
+    def normal_merchants(self) -> List[str]:
+        """完全正常的商家。把它们拉黑才算真正的误伤。
+
+        僵尸商家（长期不动价）被拉黑不算误伤：挂着半年不维护的报价本来就不该进指数，
+        算法默认对它们降权，若行为持续到触发拉黑也是合理结果。
+        """
+        return self.merchants.loc[
+            self.merchants["type"] == "normal", "merchant_id"
+        ].tolist()
+
     def truth_composite(self) -> pd.DataFrame:
         """真实综合指数（按品种权重链式聚合真实价格路径）。"""
         wide = self.truth.pivot_table(index="date", columns="category",

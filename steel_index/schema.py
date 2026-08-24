@@ -31,6 +31,7 @@ REQUIRED_COLUMNS = (COL_DATE, COL_MERCHANT, COL_CATEGORY, COL_PRICE)
 # 派生列
 COL_REGION = "region"
 COL_SPEC_GROUP = "spec_group"
+COL_SPEC_KEY = "spec_key"
 COL_SIZE = "size_mm"
 COL_SKU = "sku_id"
 COL_CELL = "cell_id"
@@ -222,9 +223,18 @@ def prepare_frame(df: pd.DataFrame) -> pd.DataFrame:
     ]
     out[COL_SPEC_GROUP] = out[COL_SPEC_GROUP].astype("string")
 
+    # SKU 用规范化后的原始规格，而不是规格档。
+    # 用规格档会把同一档内的不同规格（如 Φ20 与 Φ22）当成同一条资源，
+    # 既会被误判为重复挂牌白丢样本，也会让环比比较错对象。
+    out[COL_SPEC_KEY] = [
+        f"{s:g}" if np.isfinite(s) else _clean_key(txt)
+        for s, txt in zip(out[COL_SIZE], out[COL_SPEC])
+    ]
+    out[COL_SPEC_KEY] = out[COL_SPEC_KEY].astype("string")
+
     out[COL_SKU] = (
         out[COL_MERCHANT] + "|" + out[COL_CATEGORY].fillna("NA") + "|"
-        + out[COL_SPEC_GROUP] + "|" + out[COL_CITY] + "|" + out[COL_BRAND]
+        + out[COL_SPEC_KEY] + "|" + out[COL_CITY] + "|" + out[COL_BRAND]
     ).astype("string")
     out[COL_CELL] = (
         out[COL_CATEGORY].fillna("NA") + "|" + out[COL_SPEC_GROUP] + "|" + out[COL_CITY]

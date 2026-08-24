@@ -25,6 +25,7 @@ from .core import (
     bootstrap_link_ci,
     build_daily_panel,
     chain_index,
+    compute_links_imputed,
     compute_sku_returns,
     ewma_smooth,
     impute_cell_links,
@@ -252,8 +253,13 @@ def compute_indices(weighted: pd.DataFrame,
 
     weighted = adaptive_cells(weighted, config)
     panel = build_daily_panel(weighted, config)
-    returns = compute_sku_returns(panel)
-    cells = aggregate_cell_links(returns, config)
+    if ic.link_mode == "imputed":
+        cells, returns = compute_links_imputed(panel, config)
+    elif ic.link_mode == "strict":
+        returns = compute_sku_returns(panel, config)
+        cells = aggregate_cell_links(returns, config)
+    else:
+        raise ValueError(f"未知的环比计算方式: {ic.link_mode}")
 
     if cells.empty:
         return IndexResult(composite=pd.DataFrame(), variety=pd.DataFrame(), cells=cells,

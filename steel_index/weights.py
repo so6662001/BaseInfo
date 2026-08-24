@@ -82,16 +82,24 @@ def assign_sample_weights(clean: pd.DataFrame,
     base = _transform_stock(stock, wc.stock_transform)
     base = base.where(base > 0, base[base > 0].median() if (base > 0).any() else 1.0)
 
-    w = base.astype("float64")
-    if wc.use_credibility:
-        w = w * out[COL_CRED].astype("float64").clip(lower=0.0, upper=1.0)
-    if "is_stale" in out:
-        w = w * np.where(out["is_stale"].fillna(False), config.cleaning.stale_weight_factor, 1.0)
-    # 同源账号按组规模摊薄，等效于把一组小号合并成一个样本。
-    w = w / out["clone_size"].astype("float64").clip(lower=1.0)
-
-    out[COL_WEIGHT] = w.clip(lower=1e-9)
+    # 第一步：只对"规模"权重封顶。封顶针对的是刷库存量带来的影响力，
+    # 必须在质量折减之前完成——否则封顶回流会把质量差商家的权重重新抬回来，
+    # 信誉与僵尸降权就白做了。
+    out[COL_WEIGHT] = base.astype("float64").clip(lower=1e-9)
     out = _cap_by_merchant(out, wc.max_merchant_share)
+
+    # 第二步：叠加质量折减。这一步不再封顶：如果一个单元里只剩一家可信商家，
+    # 它就该主导这个单元的价格，而不是被迫和不可信报价平分话语权。
+    quality = pd.Series(np.ones(len(out)), index=out.index, dtype="float64")
+    if wc.use_credibility:
+        quality *= out[COL_CRED].astype("float64").clip(lower=0.0, upper=1.0)
+    if "is_stale" in out:
+        quality *= np.where(out["is_stale"].fillna(False),
+                            config.cleaning.stale_weight_factor, 1.0)
+    # 同源账号按组规模摊薄，等效于把一组小号合并成一个样本。
+    quality /= out["clone_size"].astype("float64").clip(lower=1.0)
+
+    out[COL_WEIGHT] = (out[COL_WEIGHT] * quality).clip(lower=1e-9)
     return out
 
 

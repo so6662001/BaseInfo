@@ -269,11 +269,25 @@ class IndexConfig:
     cell_link_agg: str = "geometric"
     """单元内 SKU 环比的聚合方式：geometric（Jevons，推荐）/ arithmetic。"""
 
+    link_mode: str = "imputed"
+    """环比计算方式。
+    imputed（默认）: 单元相对插补——当日未更新的挂牌价按同单元平均变动推算，
+                     再与下次真实报价比较。累计无偏，且只用当期信息，可当日发布。
+    strict         : 只用连续两天都有真实报价的样本。实现更简单、更保守，
+                     但会丢弃报价不勤商家的信息，在报价稀疏的数据上样本量偏小。"""
+
     category_weight_mode: str = "hybrid"
     """品种权重来源：fixed（外部消费结构）/ market_value（库存×价格内生）/ hybrid（几何折中）。"""
 
     weight_refresh: str = "M"
     """权重刷新频率（pandas 频率别名）；权重更新点之间用链式相乘保证指数连续。"""
+
+    include_stale_in_link: bool = True
+    """僵尸报价是否参与环比计算。
+    True （默认）: 参与但已降权。长期不动价意味着这家不认同市场调价，
+                   这个信息本身是有意义的，指数应当如实反映。
+    False        : 完全不参与环比，只计入价格水平与在售规模。
+                   适合样本里挂着大量长期不维护报价、指数被拖钝的场景。"""
 
     max_link_move: float = 0.08
     """单期指数 link 的容忍上限，用于兜底防止清洗漏网数据造成指数跳变。"""

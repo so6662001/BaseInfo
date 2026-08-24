@@ -130,11 +130,15 @@ def _print_accuracy(market, out: SteelIndexOutput) -> None:
     detected = set(out.credibility.scores.loc[
         out.credibility.scores["blacklisted"], "merchant_id"].unique())
     truth_bad = set(market.dirty_merchants)
+    normal = set(market.normal_merchants)
     if truth_bad:
         recall = len(detected & truth_bad) / len(truth_bad)
-        precision = len(detected & truth_bad) / len(detected) if detected else float("nan")
-        print(f"  捣乱商家识别     : 召回 {recall:.1%}，精确 {precision:.1%}"
-              f"（真实捣乱 {len(truth_bad)} 家，拉黑 {len(detected)} 家）")
+        print(f"  捣乱商家识别     : 召回 {recall:.1%}"
+              f"（真实捣乱 {len(truth_bad)} 家，共拉黑 {len(detected)} 家）")
+    if normal:
+        fp = len(detected & normal) / len(normal)
+        print(f"  正常商家误伤     : {fp:.1%}"
+              f"（{len(detected & normal)} / {len(normal)} 家）")
 
     clones = out.credibility.clones
     truth_clone = set(market.clone_merchants)

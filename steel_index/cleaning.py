@@ -159,6 +159,9 @@ def _layer_units_and_bounds(df: pd.DataFrame, c: cfg.CleaningConfig) -> None:
     _mark(df, act & (df[COL_PRICE] <= 0), "R010")
 
     act = _active(df)
+    if not act.any():
+        return
+
     factors = df.loc[act, COL_UNIT].map(unit_factor)
     unknown_unit = factors.isna()
     _add_flag(df, act & unknown_unit.reindex(df.index, fill_value=False), "F013")
@@ -216,6 +219,8 @@ def _layer_dedup(df: pd.DataFrame, c: cfg.CleaningConfig) -> None:
     # 刷量判定必须放在去重之前：灌水数据里本身就有大量重复，
     # 先去重再数条数，刷量商家反而会被"洗白"成正常商家。
     act = _active(df)
+    if not act.any():
+        return
     counts = df.loc[act].groupby([COL_DATE, COL_MERCHANT], observed=True)[COL_PRICE].transform("size")
     spam = counts > c.max_quotes_per_merchant_day
     _mark(df, spam.reindex(df.index, fill_value=False), "R022")
